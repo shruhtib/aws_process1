@@ -12,8 +12,7 @@ Parameters:
     Type: String
     Default: test-bucket
 
-Resources:	
-
+Resources:
   LambdaExecutionRole:
     Type: "AWS::IAM::Role"
     Properties:
@@ -41,59 +40,58 @@ Resources:
               - Effect: Allow
                 Action:
                   - "ssm:GetParameters"
-				          - "ssm:GetParameter"				           
+                  - "ssm:GetParameter"
                 Resource: "arn:aws:ssm:*:*:parameter/*"
               - Effect: Allow
                 Action:
-                  - "s3:PutObject"			           
+                  - "s3:PutObject"
                 Resource: !Sub "arn:aws:s3:::${S3Bucket}/*"
 
   processorLambda:
-	Type: AWS::Lambda::Function
-	Properties:
-	  FunctionName: !Ref FunctionName
-	  Code:
-		ZipFile: |
-	  
-		  import boto3, json, csv
-		  
-		  import cfnresponse
+    Type: "AWS::Lambda::Function"
+    Properties:
+      FunctionName: !Ref FunctionName
+      Handler: index.handler
+      Role: !GetAtt
+      - LambdaExecutionRole
+      - Arn
+      Runtime: python3.9
+      Timeout: 120
+      Code:
+        ZipFile: |
+        
+          import boto3, json, csv
+          
+          import cfnresponse
 
-		  def handler(event, context):
-			  print('incoming event:[{}]'.format(event))
+          def handler(event, context):
+            print('incoming event:[{}]'.format(event))
 
-			  ssm_client = boto3.client('ssm')
-			  s3_client = boto3.client('s3')
-			  
-			  parameter = ssm_client.get_parameter(Name='UserName')
-			  print(parameter['Parameter']['Value'])
-			  res_csv_list = ['UserName', parameter['Parameter']['Value']]
-			  
-			  # csv Header
-			  header = ['secret_name','secret_value']
-			  
-			  with open('/tmp/userinfo.csv', 'w', encoding='UTF8', newline='') as f:
-			    writer = csv.writer(f)
-				writer.writerow(header)
-				writer.writerow(res_csv_list)
-				
-			  response = s3_client.upload_file('/tmp/userinfo.csv', !Sub '${S3Bucket}, 'userinfo.csv')
+            ssm_client = boto3.client('ssm')
+            s3_client = boto3.client('s3')
+            
+            parameter = ssm_client.get_parameter(Name='UserName')
+            print(parameter['Parameter']['Value'])
+            res_csv_list = ['UserName', parameter['Parameter']['Value']]
+            
+            # csv Header
+            header = ['secret_name','secret_value']
+            
+            with open('/tmp/userinfo.csv', 'w', encoding='UTF8', newline='') as f:
+              writer = csv.writer(f)
+            writer.writerow(header)
+            writer.writerow(res_csv_list)
+            
+            response = s3_client.upload_file('/tmp/userinfo.csv', !Sub '${S3Bucket}, 'userinfo.csv')
 
-			  responseValue = 200
-			  responseData = {}
-			  responseData['Data'] = responseValue
-			  cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
-			  
-	  Handler: index.handler
-	  Role: !GetAtt
-		- LambdaExecutionRole
-		- Arn
-	  Runtime: python3.9
-	  Timeout: 120
+            responseValue = 200
+            responseData = {}
+            responseData['Data'] = responseValue
+            cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
 
   customResourceInvoke:
-    Type: AWS::CloudFormation::CustomResource
+    Type: "AWS::CloudFormation::CustomResource"
     DependsOn: processorLambda
     Version: "1.0"
     Properties:
-	  ServiceToken: !GetAtt processorLambda.Arn
+      ServiceToken: !GetAtt processorLambda.Arn
